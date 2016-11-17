@@ -1,0 +1,9 @@
+[package]
+name = "barn"
+version = "0.1.0"
+authors = ["Ryan Rasti <ryanrasti@gmail.com>"]
+
+[dependencies.fringe]
+git = "https://github.com/nathan7/libfringe"
+rev = "45ae3505c95f607f3d9e2618a4e619c87df13b29"
+no-default-features = true
