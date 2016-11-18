@@ -5,10 +5,8 @@ use fringe::SliceStack;
 
 use super::fringe_wrapper::Group;
 
-type G<U: Unit> = Group<'static, ThreadResponse<U>, ThreadRequest<U>, U::S>;
-
 pub struct Thread<U: Unit> {
-  group: G<U>,
+  group: Group<'static, ThreadResponse<U>, ThreadRequest<U>, U::S>,
   name: &'static str,
   local: U::L,
 }
