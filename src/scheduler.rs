@@ -10,19 +10,33 @@ type G<U: Unit> = Group<'static, ThreadResponse<U>, ThreadRequest<U>, U::S>;
 pub struct Thread<U: Unit> {
   group: G<U>,
   name: &'static str,
-  local: Option<U::L>,
+  local: U::L,
 }
 
 unsafe impl<U: Unit> Send for Thread<U> {}
 
+impl<U: Unit> ::core::ops::Deref for Thread<U> {
+    type Target = U::L;
+
+    fn deref(&self) -> &U::L {
+        &self.local
+    }
+}
+
+
+
 impl<U: Unit> Thread<U> {
   
-  fn new<F>(f: F, stack: U::S, name: &'static str, local: Option<U::L>) -> Thread<U>  where F: FnOnce() + Send + 'static {
+  fn new<F>(f: F, stack: U::S, name: &'static str) -> Thread<U>  where F: FnOnce() + Send + 'static {
     Thread {
       group: unsafe { Group::new(f, stack) },
       name: name,
-      local: local,
+      local: U::L::default(),
     }
+  }
+  
+  unsafe fn request(&mut self, request: ThreadRequest<U>) -> ThreadResponse<U> {
+    self.group.suspend(request)
   }
 
 }
@@ -54,7 +68,7 @@ pub trait Queue<U: Unit> where Self: Sized + Sync + 'static {
 }
 
 pub trait Unit: 'static + Sized + Sync {
-  type L;
+  type L: Default;
   type S: Stack;
   type N: Node<Self>;
 }
@@ -85,18 +99,22 @@ impl<U: Unit, Q: Queue<U>> Scheduler<U, Q> {
     Scheduler { queue: queue, _phantom: ::core::marker::PhantomData }
   }
   
-  fn request(&mut self, request: ThreadRequest<U>) -> ThreadResponse<U> {
-    unsafe { self.queue.front().unwrap().deref().group.suspend(request) }
-  }
-  
   fn _idle_thread(&self) -> Thread<U> {
     unsafe {
       let me: usize = ::core::mem::transmute(self);      
       Thread::new(move || {
         let me_static: &'static mut Scheduler<U, Q> = ::core::mem::transmute(me);
         me_static.idle() }, 
-        U::S::new(1024*1024), "idle thread", None)
+        U::S::new(1024*1024), "idle thread")
     }
+  }
+  
+  fn current_thread(&self) -> &Thread<U> {
+    self.queue.front().unwrap().deref()
+  }
+  
+  fn current_thread_mut(&mut self) -> &mut Thread<U> {
+    self.queue.front_mut().unwrap().deref_mut()
   }
   
   unsafe fn run(&mut self) -> ! {
@@ -135,7 +153,7 @@ impl<U: Unit, Q: Queue<U>> Scheduler<U, Q> {
             None => {
                 // Thread is finished.
                 if let Some(node) = self.queue.pop() {
-                  ThreadResponse::Unscheduled(node) // TODO: don't do the drop in the scheduler!
+                  ThreadResponse::Unscheduled(node) //don't drop in the scheduler!
                 } else {
                   ThreadResponse::Nothing
                 }
@@ -146,7 +164,7 @@ impl<U: Unit, Q: Queue<U>> Scheduler<U, Q> {
   
   fn idle(&mut self) {
     loop {
-        self.request(ThreadRequest::Yield);
+        unsafe { self.current_thread_mut().request(ThreadRequest::Yield); }
     }
   }
 
