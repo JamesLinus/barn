@@ -1,7 +1,6 @@
-use core::mem::{transmute, transmute_copy};
-use core::ptr;
+#![allow(dead_code)]
 
-use fringe::SliceStack;
+use core::mem::{transmute};
 
 use super::fringe_wrapper::Group;
 
@@ -31,6 +30,10 @@ impl<U: Unit> Thread<U> {
       name: name,
       local: U::L::default(),
     }
+  }
+  
+  pub fn name(&self) -> &'static str {
+    self.name
   }
   
   unsafe fn request(&mut self, request: ThreadRequest<U>) -> ThreadResponse<U> {
@@ -99,16 +102,6 @@ impl<U: Unit, Q: Queue<U>> Scheduler<U, Q> {
     Scheduler { queue: queue, _phantom: ::core::marker::PhantomData }
   }
   
-  fn _idle_thread(&self) -> Thread<U> {
-    unsafe {
-      let me: usize = ::core::mem::transmute(self);      
-      Thread::new(move || {
-        let me_static: &'static mut Scheduler<U, Q> = ::core::mem::transmute(me);
-        me_static.idle() }, 
-        U::S::new(1024*1024), "idle thread")
-    }
-  }
-  
   fn current_thread(&self) -> &Thread<U> {
     self.queue.front().unwrap().deref()
   }
@@ -124,10 +117,6 @@ impl<U: Unit, Q: Queue<U>> Scheduler<U, Q> {
   }
   
   pub fn run(&mut self) {
-    // scheduler now takes control of the CPU
-    //let mut idle = self._idle_thread();
-    //self.queue.push(U::N::new(idle));
-    
     let mut response = ThreadResponse::Nothing;
     
     while let Some(request) = self.next_request(response) {
@@ -141,8 +130,8 @@ impl<U: Unit, Q: Queue<U>> Scheduler<U, Q> {
                 ThreadRequest::StageUnschedule => {
                     // We have to pass `node` to a resume call on the tcb in node.
                     // To do so, we need to get around the borrow checker.
-                    let mut node: &U::N = self.queue.front().unwrap();
-                    let static_node: *const U::N = unsafe { ::core::mem::transmute(node) };                        
+                    let node: &U::N = self.queue.front().unwrap();
+                    let static_node: *const U::N = unsafe { transmute(node) };                        
                     unsafe { ThreadResponse::Unscheduled(::core::ptr::read(static_node)) }
                 },
                 ThreadRequest::CompleteUnschedule => {
@@ -165,12 +154,6 @@ impl<U: Unit, Q: Queue<U>> Scheduler<U, Q> {
                 }
             },
         }
-    }
-  }
-  
-  fn idle(&mut self) {
-    loop {
-        unsafe { self.current_thread_mut().request(ThreadRequest::Yield); }
     }
   }
 

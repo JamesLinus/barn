@@ -18,12 +18,10 @@
 //
 // Backlinks over LinkedList::prev are raw pointers that form a full chain in
 // the reverse direction.
-
-#[macro_export]
+#![allow(dead_code)]
+#![allow(unused_imports)]
 
 extern crate alloc;
-
-use core::prelude::*;
 
 use self::alloc::boxed::Box;
 use core::cmp::Ordering;

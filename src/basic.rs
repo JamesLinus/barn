@@ -1,8 +1,9 @@
+extern crate alloc;
 
 use fringe::OwnedStack;
 use scheduler::Thread;
 
-type Node = ::linked_list::alloc::boxed::Box<::linked_list::Node<Thread<U>>>;
+type Node = alloc::boxed::Box<::linked_list::Node<Thread<U>>>;
 type Queue = ::linked_list::LinkedList<Thread<U>>;
 type Stack = OwnedStack;
 
@@ -75,7 +76,9 @@ unsafe impl Sync for Queue {}
 
 #[cfg(test)]
 mod tests {
-  use super::{Queue, Stack};
+  use std::sync::{Arc, Mutex};
+
+  use super::{Queue};
   use scheduler::{Scheduler, Thread};
   use fringe::OwnedStack;
 
@@ -83,9 +86,14 @@ mod tests {
   fn threads() {
     let mut q = Queue::new();
     let stack = OwnedStack::new(1024 * 1024);
-    q.push_front(Thread::new(|| { print!("in a thread") }, stack, "test"));
-    loop {}
+    let ran = Arc::new(Mutex::new(false));
+    let saved_ran = ran.clone();
+    let f = move || {
+      *ran.lock().unwrap() = true;
+    };
+    q.push_front(Thread::new(f, stack, "test"));
     let mut s = Scheduler::new(q);
     s.run();
+    assert!(*saved_ran.lock().unwrap());
   }
 }

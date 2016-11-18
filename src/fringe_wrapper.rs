@@ -19,11 +19,11 @@ impl<'a, I, O, S: Stack> Group<'a, I, O, S> where I: Send + 'a, O: Send + 'a, S:
         // Alternative to the raw pointers and zero(.) is to pass `yielder` with
         // .suspend(.). That still requires a transmute due to life-times. Not worth
         // the hassel...
-        let mut yielder_ptr: &usize = &0;
+        let yielder_ptr: &usize = &0;
         let mut yielder_usize: usize = transmute(yielder_ptr);
         let mut gen = Generator::unsafe_new(stack, move |yielder, init| {
             forget(init);
-            *transmute::<_, *mut usize>(yielder_usize) = transmute(yielder);
+            yielder_usize = transmute(yielder);
             //info!("inner yielder at 0x{:x}", *transmute(yielder_usize));
             yielder.suspend(uninitialized());
             f();
