@@ -27,7 +27,7 @@ impl<U: Unit> ::core::ops::Deref for Thread<U> {
 
 impl<U: Unit> Thread<U> {
   
-  fn new<F>(f: F, stack: U::S, name: &'static str) -> Thread<U>  where F: FnOnce() + Send + 'static {
+  pub fn new<F>(f: F, stack: U::S, name: &'static str) -> Thread<U>  where F: FnOnce() + Send + 'static {
     Thread {
       group: unsafe { Group::new(f, stack) },
       name: name,
@@ -52,7 +52,7 @@ pub trait Node<U: Unit> where Self: Send + Sized {
 }
 
 pub trait Stack: ::fringe::Stack + Sized {
-  fn new(size: u8) -> Self;
+  fn new(size: usize) -> Self;
 }
 
 // Must do no allocations for these methods
@@ -77,6 +77,8 @@ pub trait Unit: 'static + Sized + Sync {
 enum ThreadRequest<U: Unit> {
     Yield,
     StageUnschedule,
+    // idea, instead of donating a node, donate an abstract
+    // "donation" if determine that a run queue is low
     Schedule(U::N),
     CompleteUnschedule,
 }
@@ -95,7 +97,7 @@ pub struct Scheduler<U: Unit, Q: Queue<U>> {
 impl<U: Unit, Q: Queue<U>> Scheduler<U, Q> {
   
   // Creates a scheduler with the given thread queue
-  fn new(queue: Q) -> Scheduler<U, Q> {
+  pub fn new(queue: Q) -> Scheduler<U, Q> {
     Scheduler { queue: queue, _phantom: ::core::marker::PhantomData }
   }
   
@@ -117,14 +119,20 @@ impl<U: Unit, Q: Queue<U>> Scheduler<U, Q> {
     self.queue.front_mut().unwrap().deref_mut()
   }
   
-  unsafe fn run(&mut self) -> ! {
+  fn next_request(&mut self, response: ThreadResponse<U>) -> Option<Option<ThreadRequest<U>>> {
+    unsafe {
+      self.queue.front_mut().map(|x| x.deref_mut().group.resume(response))
+    }
+  }
+  
+  pub fn run(&mut self) {
     // scheduler now takes control of the CPU
-    let mut idle = self._idle_thread();
-    self.queue.push(U::N::new(idle));
+    //let mut idle = self._idle_thread();
+    //self.queue.push(U::N::new(idle));
     
     let mut response = ThreadResponse::Nothing;
-    loop {
-        let mut request = self.queue.front_mut().unwrap().deref_mut().group.resume(response);
+    
+    while let Some(request) = self.next_request(response) {
         response = match request {
             Some(req) => match req {
                 ThreadRequest::Yield => {
