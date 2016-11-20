@@ -35,7 +35,7 @@ pub trait Queue<U: SchedulerUnit> where Self: Sized + Sync + 'static {
 pub enum Request<U: SchedulerUnit> {
     Yield,
     Schedule(U::N),
-    Unschedule(Option<&'static Fn(U::N) -> ()>),
+    Unschedule(Option<&'static (Fn(U::N) -> () + Sync)>),
 }
 
 pub enum Response<U: SchedulerUnit> {

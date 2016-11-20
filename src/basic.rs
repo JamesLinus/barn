@@ -1,34 +1,34 @@
-/*
+
 extern crate alloc;
 
 use self::alloc::boxed::Box;
 
 use fringe::OwnedStack;
-use scheduler::{Generator, Yielder, SchedulerUnti};
+use scheduler::{Generator, Yielder, SchedulerUnit};
 
 struct Unit;
 impl SchedulerUnit for Unit {
   type N = Node;
   type Q = Queue;
-  type 
+  type S = OwnedStack;
 }
 
-type Node = Box<::linked_list::Node<Generator<Node, OwnedStack>>>;
-type Queue = ::linked_list::LinkedList<Gen>;
+type Node = Box<::linked_list::Node<Generator<Unit>>>;
+type Queue = ::linked_list::LinkedList<Generator<Unit>>;
 
-impl ::scheduler::Node for Node {
+impl ::scheduler::Node<Unit> for Node {
 
-  fn deref(&self) -> &Generator<Node, OwnedStack> {
+  fn deref(&self) -> &Generator<Unit> {
     &self.value
   }
   
-  fn deref_mut(&mut self) -> &mut Generator<Node, OwnedStack> {
+  fn deref_mut(&mut self) -> &mut Generator<Unit> {
     &mut self.value
   }
 
 }
 
-impl ::scheduler::Queue for Queue {
+impl ::scheduler::Queue<Unit> for Queue {
 
   fn push(&mut self, node: Node) {
     self.push_back_node(node);
@@ -55,9 +55,9 @@ unsafe impl Sync for Queue {}
 mod tests {
   use std::sync::{Arc, Mutex};
 
-  use super::{Queue};
-  use scheduler::{Scheduler, Thread};
-  use fringe::{OwnedStack, Generator, Yielder};
+  use super::{Queue, Unit};
+  use scheduler::{Scheduler};
+  use fringe::{OwnedStack, Generator};
 
   #[test]
   fn threads() {
@@ -65,13 +65,14 @@ mod tests {
     let stack = OwnedStack::new(1024 * 1024);
     let ran = Arc::new(Mutex::new(false));
     let saved_ran = ran.clone();
-    let f = move || {
+    let g = unsafe {
+      Generator::unsafe_new(stack, move |yielder, _| {
       *ran.lock().unwrap() = true;
+      })
     };
-    q.push_front(Thread::new(f, stack, "test"));
-    let mut s = Scheduler::new(q);
+    q.push_front(g);
+    let mut s: Scheduler<Unit> = Scheduler::new(q);
     s.run();
     assert!(*saved_ran.lock().unwrap());
   }
 }
-*/
