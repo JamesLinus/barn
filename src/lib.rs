@@ -4,6 +4,7 @@
 #![no_std]
 #![feature(alloc)]
 #![feature(rand)]
+#![feature(associated_type_defaults)]
 
 #[cfg(test)]
 #[macro_use]

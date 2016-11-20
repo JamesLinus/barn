@@ -1,57 +1,34 @@
+/*
 extern crate alloc;
 
+use self::alloc::boxed::Box;
+
 use fringe::OwnedStack;
-use scheduler::Thread;
+use scheduler::{Generator, Yielder, SchedulerUnti};
 
-type Node = alloc::boxed::Box<::linked_list::Node<Thread<U>>>;
-type Queue = ::linked_list::LinkedList<Thread<U>>;
-type Stack = OwnedStack;
-
-struct U;
-impl ::scheduler::Unit for U {
-  type L = Local;
-  type S = Stack;
+struct Unit;
+impl SchedulerUnit for Unit {
   type N = Node;
+  type Q = Queue;
+  type 
 }
 
-pub struct Local {
+type Node = Box<::linked_list::Node<Generator<Node, OwnedStack>>>;
+type Queue = ::linked_list::LinkedList<Gen>;
 
-}
+impl ::scheduler::Node for Node {
 
-impl Default for Local {
-
-  fn default() -> Local {
-    Local {}
-  }
-
-}
-
-impl ::scheduler::Stack for Stack {
-  
-  fn new(size: usize) -> Self {
-    OwnedStack::new(size)
-  }
-  
-}
-
-impl ::scheduler::Node<U> for Node {
-
-  fn new(t: Thread<U>) -> Node {
-    box ::linked_list::Node::new(t)
-  }
-
-  fn deref(&self) -> &Thread<U> {
+  fn deref(&self) -> &Generator<Node, OwnedStack> {
     &self.value
   }
   
-  fn deref_mut(&mut self) -> &mut Thread<U> {
+  fn deref_mut(&mut self) -> &mut Generator<Node, OwnedStack> {
     &mut self.value
   }
 
 }
 
-
-impl ::scheduler::Queue<U> for Queue {
+impl ::scheduler::Queue for Queue {
 
   fn push(&mut self, node: Node) {
     self.push_back_node(node);
@@ -80,7 +57,7 @@ mod tests {
 
   use super::{Queue};
   use scheduler::{Scheduler, Thread};
-  use fringe::OwnedStack;
+  use fringe::{OwnedStack, Generator, Yielder};
 
   #[test]
   fn threads() {
@@ -97,3 +74,4 @@ mod tests {
     assert!(*saved_ran.lock().unwrap());
   }
 }
+*/
