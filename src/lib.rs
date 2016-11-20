@@ -14,7 +14,5 @@ extern crate fringe;
 
 pub mod scheduler;
 
-mod fringe_wrapper;
-
 mod linked_list;
 pub mod basic;
