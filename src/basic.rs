@@ -4,25 +4,28 @@ extern crate alloc;
 use self::alloc::boxed::Box;
 
 use fringe::OwnedStack;
-use scheduler::{Generator, Yielder, SchedulerUnit};
+use scheduler::{Thread, SchedulerUnit};
 
 struct Unit;
 impl SchedulerUnit for Unit {
+  type L = Local;
   type N = Node;
   type Q = Queue;
   type S = OwnedStack;
 }
 
-type Node = Box<::linked_list::Node<Generator<Unit>>>;
-type Queue = ::linked_list::LinkedList<Generator<Unit>>;
+type Local = Option<()>;
+
+type Node = Box<::linked_list::Node<Thread<Unit>>>;
+type Queue = ::linked_list::LinkedList<Thread<Unit>>;
 
 impl ::scheduler::Node<Unit> for Node {
 
-  fn deref(&self) -> &Generator<Unit> {
+  fn deref(&self) -> &Thread<Unit> {
     &self.value
   }
   
-  fn deref_mut(&mut self) -> &mut Generator<Unit> {
+  fn deref_mut(&mut self) -> &mut Thread<Unit> {
     &mut self.value
   }
 
@@ -56,7 +59,7 @@ mod tests {
   use std::sync::{Arc, Mutex};
 
   use super::{Queue, Unit};
-  use scheduler::{Scheduler};
+  use scheduler::{Scheduler, Thread};
   use fringe::{OwnedStack, Generator};
 
   #[test]
@@ -66,7 +69,7 @@ mod tests {
     let ran = Arc::new(Mutex::new(false));
     let saved_ran = ran.clone();
     let g = unsafe {
-      Generator::unsafe_new(stack, move |yielder, _| {
+      Thread::new(stack, move || {
       *ran.lock().unwrap() = true;
       })
     };

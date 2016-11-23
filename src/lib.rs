@@ -6,12 +6,15 @@
 #![feature(rand)]
 #![feature(associated_type_defaults)]
 
-#[cfg(test)]
+#[cfg(any(test, feature="hosted"))]
 #[macro_use]
 extern crate std;
 
 extern crate fringe;
+extern crate spin;
 
+mod arch;
+mod fringe_wrapper;
 pub mod scheduler;
 
 mod linked_list;

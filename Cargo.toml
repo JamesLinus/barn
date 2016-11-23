@@ -3,7 +3,15 @@ name = "barn"
 version = "0.1.0"
 authors = ["Ryan Rasti <ryanrasti@gmail.com>"]
 
+[features]
+default = ["hosted"]
+hosted = []
+
 [dependencies.fringe]
 git = "https://github.com/nathan7/libfringe"
 rev = "45ae3505c95f607f3d9e2618a4e619c87df13b29"
 no-default-features = true
+
+[dependencies.spin]
+git = "https://github.com/ryanra/spinlock-rs"
+rev = "19dfa37eac97210ab460369f4ea6f814a9523ce9"

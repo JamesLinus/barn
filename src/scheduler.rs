@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 
 use core::mem::{transmute};
+use core::ops::Deref;
+use core::ops::DerefMut;
 
-pub type Generator<U: SchedulerUnit> = ::fringe::Generator<'static, Response<U>, Request<U>, U::S>;
-pub type Yielder<U: SchedulerUnit> = ::fringe::generator::Yielder<Response<U>, Request<U>>;
+use fringe_wrapper::Group;
 
 pub trait SchedulerUnit where Self: Sized + 'static {
+  type L: Default;
   type Q: Queue<Self>;
   type N: Node<Self>;
   type S: ::fringe::Stack;
@@ -14,9 +16,9 @@ pub trait SchedulerUnit where Self: Sized + 'static {
 pub trait Node<U: SchedulerUnit> where Self: Send + Sized {
   
   // TODO: should be able to inhereit associated type, but looks like compiler problem.
-  fn deref(&self) -> &Generator<U>;
+  fn deref(&self) -> &Thread<U>;
   
-  fn deref_mut(&mut self) -> &mut Generator<U>;
+  fn deref_mut(&mut self) -> &mut Thread<U>;
 }
 
 // Must do no allocations for these methods
@@ -32,10 +34,75 @@ pub trait Queue<U: SchedulerUnit> where Self: Sized + Sync + 'static {
   fn front_mut(&mut self) -> Option<&mut U::N>;
 }
 
+pub struct Thread<U: SchedulerUnit> {
+  group: Group<'static, Response<U>, Request<U>, U::S>,
+  local: U::L
+}
+
+
+
+type Arch<U: SchedulerUnit> = ::arch::Arch<(Thread<U>)>;
+
+impl<U: SchedulerUnit> Thread<U> {
+
+  pub fn new<F>(stack: U::S, f: F) -> Thread<U> where F: FnOnce() + Send + Sized + 'static {
+    Thread {
+      group: Group::new(stack, f),
+      local: U::L::default(),
+    }
+  }
+
+  pub fn suspend(request: Request<U>) -> Response<U> {
+    let _guard = unsafe { Arch::<U>::no_preempt() };// no interrupts while switching
+    let me = Self::current();
+    unsafe { me.group.suspend(request) }
+  }
+
+  fn resume(&mut self, response: Response<U>) -> Option<Request<U>> {
+    // Make sure to set the thread locals on resume.
+    // This doesn't go in suspend because it needs to also be set on
+    // thread start.
+    unsafe {
+      let me: &'static Self = transmute(&self);
+      Arch::<U>::set(me);
+      self.group.resume(response)
+    }
+  }
+
+  pub fn current() -> &'static Thread<U> {
+    unsafe { Arch::<U>::get() }
+  }
+
+  pub fn current_mut() -> &'static mut Thread<U> {
+    unsafe { Arch::<U>::get() }
+  }
+
+  pub fn local(&self) -> &U::L {
+    &self.local
+  }
+
+  pub fn local_mut(&mut self) -> &mut U::L {
+    &mut self.local
+  }
+
+}
+
+unsafe impl<U: SchedulerUnit> Send for Group<'static, Response<U>, Request<U>, U::S> {}
+
 pub enum Request<U: SchedulerUnit> {
     Yield,
     Schedule(U::N),
     Unschedule(Option<&'static (Fn(U::N) -> () + Sync)>),
+}
+
+impl<U: SchedulerUnit> Request<U> {
+
+  fn make_schedule(use_node: &(FnOnce(U::N) -> ())) -> Request<U> {
+    // safe because the function is not used after it is called once
+    let f = unsafe { ::core::mem::transmute(use_node) };
+    Request::Unschedule(Some(f))
+  }
+
 }
 
 pub enum Response<U: SchedulerUnit> {
@@ -58,7 +125,7 @@ impl<U: SchedulerUnit> Scheduler<U> {
     let front: Option<&mut U::N> = self.queue.front_mut();
     front.map(|x| x.deref_mut().resume(response).unwrap_or(Request::Unschedule(None)))
   }
-  
+
   pub fn run(&mut self) {
     let mut response = Response::Nothing;
     
@@ -72,7 +139,7 @@ impl<U: SchedulerUnit> Scheduler<U> {
           Request::Unschedule(maybe_taker) => {
             let node = self.queue.pop().unwrap();
             match maybe_taker {
-              Some(taker) => {
+              Some(ref taker) => {
                 taker(node);
                 Response::Unscheduled(None)
               }
@@ -87,4 +154,57 @@ impl<U: SchedulerUnit> Scheduler<U> {
     }
   }
 
+}
+
+struct Lock<U: SchedulerUnit> {
+  queue_lock: ::spin::Mutex<(U::Q, bool)>,
+}
+
+impl<U: SchedulerUnit> Lock<U> {
+  
+  fn new(queue: U::Q) -> Lock<U> {
+    Lock { queue_lock: ::spin::Mutex::new((queue, false)) }
+  }
+  
+  fn try_lock(&self) -> bool {
+    let mut l = self.queue_lock.lock();
+    let &mut (_, ref mut taken) = l.deref_mut();
+    if *taken {
+      false
+    } else {
+      *taken = true;
+      true
+    }
+  }
+  
+  fn lock(&self) {
+    loop {
+      let mut l = self.queue_lock.lock();
+      match l.deref_mut() {
+        &mut (_, ref mut taken) => {
+          if !*taken {
+            *taken = true;
+            break;
+          }
+        }
+      }
+      let take = move |me| {
+        match l.deref_mut() {
+          &mut (ref mut queue, _) => queue.push(me)
+        }
+        drop(l);
+      };
+      Thread::<U>::suspend(Request::make_schedule(&take));
+    }
+  }
+  
+  fn unlock(&self) {
+    let mut l = self.queue_lock.lock();
+    let &mut (ref mut queue, ref mut taken) = l.deref_mut();
+    *taken = false;
+    if let Some(node) = queue.pop() {
+      Thread::<U>::suspend(Request::Schedule(node));
+    }
+  }
+  
 }
