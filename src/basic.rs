@@ -67,7 +67,8 @@ mod tests {
   use super::{Queue, Unit};
   use scheduler::{Scheduler, Thread, Request};
   use fringe::{OwnedStack, Generator};
-  use lock::{Mutex};
+
+  type Mutex<T> = ::lock::Mutex<T, Unit>;
 
   fn thread<F: FnOnce() + Send + 'static>(f: F) -> Thread<Unit> {
     let stack = OwnedStack::new(1024 * 1024);
@@ -106,7 +107,7 @@ mod tests {
   #[test]
   fn mutex_smoke() {
     let mut q = Queue::new();
-    let ran = Arc::new(Mutex::<_, Unit>::new(false));
+    let ran = Arc::new(Mutex::new(false));
     let saved_ran = ran.clone();
     let t = thread(move || {
       *ran.lock() = true;
@@ -120,7 +121,7 @@ mod tests {
   #[test]
   fn mutex_contention() {
     let mut q = Queue::new();
-    let sum = Arc::new(Mutex::<_, Unit>::new(0));
+    let sum = Arc::new(Mutex::new(0));
     let sum_copy1 = sum.clone();
     let sum_copy2 = sum.clone();
 
