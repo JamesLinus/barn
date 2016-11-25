@@ -53,6 +53,7 @@ impl<U: SchedulerUnit> Thread<U> {
   pub fn suspend(request: Request<U>) -> Response<U> {
     let _guard = unsafe { Arch::<U>::no_preempt() };// no interrupts while switching
     let me = Self::current();
+    debug!("suspend current: 0x{:x}", me as *const Self as usize);
     unsafe { me.group.suspend(request) }
   }
 
@@ -61,7 +62,8 @@ impl<U: SchedulerUnit> Thread<U> {
     // This doesn't go in suspend because it needs to also be set on
     // thread start.
     unsafe {
-      let me: &'static Self = transmute(&self);
+      let me: &'static Self = transmute(self as *const Self);
+      debug!("setting current to : 0x{:x}", me as *const Self as usize);
       Arch::<U>::set(me);
       self.group.resume(response)
     }
@@ -121,16 +123,23 @@ impl<U: SchedulerUnit> Scheduler<U> {
   
   fn next_request(&mut self, response: Response<U>) -> Option<Request<U>> {
     let front: Option<&mut U::N> = self.queue.front_mut();
-    front.map(|x| x.deref_mut().resume(response).unwrap_or(Request::Unschedule(None)))
+    front.map(|x| {
+      debug!("front is 0x{:x}", x.deref_mut() as *const Thread<U> as usize);
+      let r = x.deref_mut().resume(response).unwrap_or(Request::Unschedule(None));
+      debug!("back");
+      r
+    })
   }
 
   pub fn run(&mut self) {
     let mut response = Response::Nothing;
     
     while let Some(request) = self.next_request(response) {
+      debug!("go request");
         response = match request {
           Request::Yield => {
               let c = self.queue.pop().unwrap();
+              debug!("c is 0x{:x}", c.deref() as *const Thread<U> as usize);
               self.queue.push(c);
               Response::Nothing
           },

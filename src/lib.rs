@@ -10,12 +10,22 @@
 #[macro_use]
 extern crate std;
 
+macro_rules! debug {
+    ($fmt:expr) => {
+      println!(concat!("DEBUG: ", $fmt));
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+      println!(concat!("DEBUG: ", $fmt), $($arg)*);
+    }
+}
+
 extern crate fringe;
 extern crate spin;
 
 pub mod dependencies;
 mod arch;
 mod fringe_wrapper;
+#[macro_use]
 pub mod scheduler;
 pub mod lock;
 

@@ -4,27 +4,29 @@ extern crate alloc;
 use self::alloc::boxed::Box;
 
 use fringe::OwnedStack;
-use scheduler::{Thread};
+use scheduler::{Thread, Node};
+
+use core::ops::Deref;
 
 struct Unit;
 impl ::scheduler::SchedulerUnit for Unit {
   type L = Local;
-  type N = Node;
+  type N = BasicNode;
   type Q = Queue;
   type S = OwnedStack;
 }
 
 type Local = Option<()>;
 
-type Node = Box<::linked_list::Node<Thread<Unit>>>;
+type BasicNode = Box<::linked_list::Node<Thread<Unit>>>;
 type Queue = ::linked_list::LinkedList<Thread<Unit>>;
 
-impl ::scheduler::Node<Unit> for Node {
+impl Node<Unit> for BasicNode {
 
   fn deref(&self) -> &Thread<Unit> {
     &self.value
   }
-  
+
   fn deref_mut(&mut self) -> &mut Thread<Unit> {
     &mut self.value
   }
@@ -37,19 +39,19 @@ impl ::scheduler::Queue<Unit> for Queue {
     ::linked_list::LinkedList::new()
   }
 
-  fn push(&mut self, node: Node) {
+  fn push(&mut self, node: BasicNode) {
     self.push_back_node(node);
   }
   
-  fn pop(&mut self) -> Option<Node> {
+  fn pop(&mut self) -> Option<BasicNode> {
     self.pop_front_node()
   }
   
-  fn front(&self) -> Option<&Node> {
+  fn front(&self) -> Option<&BasicNode> {
     self.list_head.as_ref()
   }
 
-  fn front_mut(&mut self) -> Option<&mut Node> {
+  fn front_mut(&mut self) -> Option<&mut BasicNode> {
     self.list_head.as_mut()
   }
 
@@ -81,6 +83,8 @@ mod tests {
       *ran.lock().unwrap() = true;
     });
     q.push_front(t);
+    debug!("pushed: 0x{:x}", q.front().unwrap() as *const Thread<Unit> as usize);
+
     let mut s: Scheduler<Unit> = Scheduler::new(q);
     s.run();
     assert!(*saved_ran.lock().unwrap());

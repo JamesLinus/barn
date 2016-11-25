@@ -20,18 +20,21 @@ impl<'a, I, O, S: Stack> Group<'a, I, O, S> where I: Send + 'a, O: Send + 'a, S:
         // .suspend(.). That still requires a transmute due to life-times. Not worth
         // the hassel...
         unsafe {
-          let yielder_ptr: &usize = &0;
-          let mut yielder_usize: usize = transmute(yielder_ptr);
+          let yielder_ptr: &mut usize = &mut 0;
+          debug!("yielder ptr: 0x{:x}", yielder_ptr as *const usize as usize);
+          let yielder_usize: usize = yielder_ptr as *const usize as usize;
           let mut gen = Generator::unsafe_new(stack, move |yielder, init| {
               forget(init);
-              yielder_usize = transmute(yielder);
-              //info!("inner yielder at 0x{:x}", *transmute(yielder_usize));
+              debug!("gen start: t 0x{:x}", transmute::<_, usize>(yielder_usize));
+              *transmute::<_, *mut usize>(yielder_usize) = transmute(yielder);
+              debug!("inner yielder at 0x{:x}", *(yielder_usize as *const usize));
+              debug!("bar {}", 1);
               yielder.suspend(uninitialized());
               f();
           });
 
           forget(gen.resume(uninitialized()));
-          //info!("got yielder at 0x{:x}", *yielder_ptr);
+          debug!("got yielder at 0x{:x}", *yielder_ptr);
           Group { generator: gen, yielder: transmute(*yielder_ptr)}
         }
     }
