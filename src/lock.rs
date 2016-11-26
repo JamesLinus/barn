@@ -49,7 +49,10 @@ impl<'a, T:'a, U: SchedulerUnit> Drop for MutexGuard<'a, T, U> {
 impl<T, U: SchedulerUnit> Mutex<T, U> {
 
   pub fn new(data: T) -> Mutex<T, U> {
-    Mutex { queue_lock: ::spin::Mutex::new((U::Q::new(), false)), data: UnsafeCell::new(data), p: PhantomData::<U> }
+    Mutex { queue_lock: ::spin::Mutex::new((U::Q::new(), false)),
+            data: UnsafeCell::new(data),
+            p: PhantomData::<U>,
+    }
   }
 
   pub fn try_lock(&self) -> Option<MutexGuard<T, U>> {
@@ -93,9 +96,46 @@ impl<T, U: SchedulerUnit> Mutex<T, U> {
       Thread::<U>::suspend(Request::Schedule(node));
     }
   }
-
 }
 
 
 unsafe impl<T: Send, U: SchedulerUnit> Send for Mutex<T, U> { }
 unsafe impl<T: Send, U: SchedulerUnit> Sync for Mutex<T, U> { }
+
+pub struct Condvar<U: SchedulerUnit> {
+  sleepers: ::spin::Mutex<(U::Q)>
+}
+
+impl<U: SchedulerUnit> Condvar<U> {
+
+  pub fn new() -> Condvar<U> {
+    Condvar { sleepers: ::spin::Mutex::new(U::Q::new()) }
+  }
+
+  pub fn wait<'a, T>(&self, guard: MutexGuard<'a, T, U>) -> MutexGuard<'a, T, U> {
+    let mut sleepers = self.sleepers.lock();
+    let mutex = guard.lock;
+    let take = move |me: U::N| {
+      sleepers.push(me);
+      drop(sleepers);
+      drop(guard);
+    };
+    Thread::<U>::suspend(Request::make_schedule(&take));
+    mutex.lock()
+  }
+
+  pub fn notify_one(&self) {
+    if let Some(node) = self.sleepers.lock().pop() {
+      Thread::<U>::suspend(Request::Schedule(node));
+    }
+  }
+
+  pub fn notify_all(&self) {
+    let mut sleepers = self.sleepers.lock();
+    while let Some(node) = sleepers.pop() {
+      Thread::<U>::suspend(Request::Schedule(node));
+    }
+  }
+
+}
+
