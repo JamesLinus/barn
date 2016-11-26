@@ -69,6 +69,7 @@ mod tests {
   use fringe::{OwnedStack, Generator};
 
   type Mutex<T> = ::lock::Mutex<T, Unit>;
+  type Condvar = ::lock::Condvar<Unit>;
 
   fn thread<F: FnOnce() + Send + 'static>(f: F) -> Thread<Unit> {
     let stack = OwnedStack::new(1024 * 1024);
@@ -142,6 +143,41 @@ mod tests {
     let mut s: Scheduler<Unit> = Scheduler::new(q);
     s.run();
     assert!(*sum.lock() == 2);
+  }
+
+  #[test]
+  fn condvar_smoke() {
+    let mut q = Queue::new();
+
+    let pair = Arc::new((Mutex::new(vec!()), Condvar::new()));
+    let pair2 = pair.clone();
+    let pair3 = pair.clone();
+
+    let t1 = thread(move || {
+      let inner = thread(move || {
+        let &(ref lock, ref cvar) = &*pair2;
+        let mut v = lock.lock();
+        while v.len() == 0 {
+          v = cvar.wait(v);
+        }
+        v.push(2);
+        cvar.notify_one();
+      });
+
+      Thread::<Unit>::suspend(Request::Schedule(box ::linked_list::Node::new(inner)));
+
+      let &(ref lock, ref cvar) = &*pair;
+      let mut v = lock.lock();
+      v.push(1);
+      v = cvar.wait(v);
+      v.push(3)
+    });
+
+    q.push_front(t1);
+
+    Scheduler::<Unit>::new(q).run();
+    let &(ref lock, _) = &*pair3;
+    assert_eq!(*lock.lock(), vec!(1, 2, 3));
   }
 
 }

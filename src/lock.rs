@@ -77,6 +77,7 @@ impl<T, U: SchedulerUnit> Mutex<T, U> {
           }
         }
       }
+      debug!("didn't get lock, sleeping");
       let take = move |me| {
         match l.deref_mut() {
           &mut (ref mut queue, _) => queue.push(me)
@@ -113,9 +114,11 @@ impl<U: SchedulerUnit> Condvar<U> {
   }
 
   pub fn wait<'a, T>(&self, guard: MutexGuard<'a, T, U>) -> MutexGuard<'a, T, U> {
+    debug!("in wait");
     let mut sleepers = self.sleepers.lock();
     let mutex = guard.lock;
     let take = move |me: U::N| {
+      debug!("adding a sleeper");
       sleepers.push(me);
       drop(sleepers);
       drop(guard);
@@ -125,7 +128,9 @@ impl<U: SchedulerUnit> Condvar<U> {
   }
 
   pub fn notify_one(&self) {
+    debug!("notifying 1");
     if let Some(node) = self.sleepers.lock().pop() {
+      debug!("waking a sleeper");
       Thread::<U>::suspend(Request::Schedule(node));
     }
   }

@@ -25,7 +25,6 @@ extern crate spin;
 pub mod dependencies;
 mod arch;
 mod fringe_wrapper;
-#[macro_use]
 pub mod scheduler;
 pub mod lock;
 

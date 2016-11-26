@@ -63,7 +63,7 @@ impl<U: SchedulerUnit> Thread<U> {
     // thread start.
     unsafe {
       let me: &'static Self = transmute(self as *const Self);
-      debug!("setting current to : 0x{:x}", me as *const Self as usize);
+      debug!("resuming: setting local to : 0x{:x}", me as *const Self as usize);
       Arch::<U>::set(me);
       self.group.resume(response)
     }
@@ -132,18 +132,20 @@ impl<U: SchedulerUnit> Scheduler<U> {
   }
 
   pub fn run(&mut self) {
+    debug!("=====Scheduler start=====");
     let mut response = Response::Nothing;
     
     while let Some(request) = self.next_request(response) {
-      debug!("go request");
         response = match request {
           Request::Yield => {
+              debug!("got yield request");
               let c = self.queue.pop().unwrap();
               debug!("c is 0x{:x}", c.deref() as *const Thread<U> as usize);
               self.queue.push(c);
               Response::Nothing
           },
           Request::Unschedule(maybe_taker) => {
+            debug!("got unschedule request");
             let node = self.queue.pop().unwrap();
             match maybe_taker {
               Some(ref taker) => {
@@ -154,11 +156,13 @@ impl<U: SchedulerUnit> Scheduler<U> {
             }
           },
           Request::Schedule(tcb_node) => {
+            debug!("got schedule request");
               self.queue.push(tcb_node);
               Response::Nothing
           },
         }
     }
+    debug!("=====Scheduler end=====")
   }
 
 }
