@@ -162,7 +162,7 @@ impl<U: SchedulerUnit> Scheduler<U> {
           },
         }
     }
-    debug!("=====Scheduler end=====")
+    debug!("=====Scheduler end=====");
   }
 
 }

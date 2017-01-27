@@ -44,8 +44,7 @@ impl<T> Arch<T> {
 
 }
 
-// TODO: make for each arch, this is only for
-// a mod with std
+#[cfg(feature = "hosted")]
 mod local_impl {
 
   use std::cell::RefCell;
@@ -78,4 +77,58 @@ mod local_impl {
     NO_PREEMPT.with(|l| { *l.borrow_mut() = old });
   }
 
+}
+
+#[cfg(all(not(feature = "hosted"), target_arch = "x86"))]
+mod local_impl {
+
+  pub type Result = bool;
+
+  pub fn get() -> usize {
+    let gs: u32;
+    unsafe {
+      asm!("movl %gs, $0"
+          :"={eax}"(gs)
+          :
+          :
+          :"volatile");
+    }
+    gs as usize
+  }
+
+  pub fn set(value: usize) {
+    unsafe {
+      asm!("movl $0, %gs"
+          :
+          :"{eax}"(value as u32)
+          :
+          :"volatile");
+    }
+  }
+
+  unsafe fn interrupts_enabled() -> bool {
+    let eflags: u32;
+    asm!("pushfd\n
+        popl %eax"
+        :"={eax}"(eflags)
+        :
+        :
+        :"volatile");
+    (eflags >> 9 & 1) == 1
+  }
+
+
+  pub fn no_preempt_start() -> Result {
+    unsafe {
+      let was_enabled: bool = interrupts_enabled();
+      asm!("cli" :::: "volatile");
+      was_enabled
+    }
+  }
+
+  pub fn no_preempt_end(was_enabled: Result) {
+    if was_enabled {
+      unsafe { asm!("sti" :::: "volatile"); }
+    }
+  }
 }

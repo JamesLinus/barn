@@ -5,6 +5,8 @@ use core::cell::UnsafeCell;
 
 use scheduler::{Scheduler, Thread, Request, SchedulerUnit, Queue};
 
+use ::poison::{LockResult, TryLockError, TryLockResult};
+
 pub struct Mutex<T, U: SchedulerUnit> {
   queue_lock: ::spin::Mutex<(U::Q, bool)>,
   data: UnsafeCell<T>,
@@ -55,18 +57,18 @@ impl<T, U: SchedulerUnit> Mutex<T, U> {
     }
   }
 
-  pub fn try_lock(&self) -> Option<MutexGuard<T, U>> {
+  pub fn try_lock(&self) -> TryLockResult<MutexGuard<T, U>> {
     let mut l = self.queue_lock.lock();
     let &mut (_, ref mut taken) = l.deref_mut();
     if *taken {
-      None
+      Err(TryLockError::WouldBlock)
     } else {
       *taken = true;
-      Some(MutexGuard::new(self))
+      Ok(MutexGuard::new(self))
     }
   }
 
-  pub fn lock(&self) -> MutexGuard<T, U> {
+  pub fn lock(&self) -> LockResult<MutexGuard<T, U>> {
     loop {
       let mut l = self.queue_lock.lock();
       match l.deref_mut() {
@@ -86,7 +88,7 @@ impl<T, U: SchedulerUnit> Mutex<T, U> {
       };
       Thread::<U>::suspend(Request::make_schedule(&take));
     }
-    MutexGuard::new(self)
+    Ok(MutexGuard::new(self))
   }
 
   fn unlock(&self) {
@@ -113,7 +115,7 @@ impl<U: SchedulerUnit> Condvar<U> {
     Condvar { sleepers: ::spin::Mutex::new(U::Q::new()) }
   }
 
-  pub fn wait<'a, T>(&self, guard: MutexGuard<'a, T, U>) -> MutexGuard<'a, T, U> {
+  pub fn wait<'a, T>(&self, guard: MutexGuard<'a, T, U>) -> LockResult<MutexGuard<'a, T, U>> {
     debug!("in wait");
     let mut sleepers = self.sleepers.lock();
     let mutex = guard.lock;
@@ -143,4 +145,28 @@ impl<U: SchedulerUnit> Condvar<U> {
   }
 
 }
+
+
+pub struct RwLock<T: ?Sized, U: SchedulerUnit> {
+  p: PhantomData<U>,
+  __data: UnsafeCell<T>,
+}
+
+#[must_use]
+pub struct RwLockReadGuard<'a, T: ?Sized + 'a, U: SchedulerUnit> {
+  __lock: &'a RwLock<T, U>,
+}
+
+impl<'a, T: ?Sized, U: SchedulerUnit> !Send for RwLockReadGuard<'a, T, U> {
+
+}
+
+/// RAII structure used to release the exclusive write access of a lock when
+/// dropped.
+#[must_use]
+pub struct RwLockWriteGuard<'a, T: ?Sized + 'a, U: SchedulerUnit> {
+    __lock: &'a RwLock<T, U>,
+}
+
+impl<'a, T: ?Sized, U: SchedulerUnit> !Send for RwLockWriteGuard<'a, T, U> {}
 

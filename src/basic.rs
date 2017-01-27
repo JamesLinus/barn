@@ -8,7 +8,7 @@ use scheduler::{Thread, Node};
 
 use core::ops::Deref;
 
-struct Unit;
+pub struct Unit;
 impl ::scheduler::SchedulerUnit for Unit {
   type L = Local;
   type N = BasicNode;
@@ -111,12 +111,12 @@ mod tests {
     let ran = Arc::new(Mutex::new(false));
     let saved_ran = ran.clone();
     let t = thread(move || {
-      *ran.lock() = true;
+      *ran.lock().unwrap() = true;
     });
     q.push_front(t);
     let mut s: Scheduler<Unit> = Scheduler::new(q);
     s.run();
-    assert!(*saved_ran.lock());
+    assert!(*saved_ran.lock().unwrap());
   }
 
   #[test]
@@ -127,7 +127,7 @@ mod tests {
     let sum_copy2 = sum.clone();
 
     let t = thread(move || {
-      let mut i = sum_copy1.lock();
+      let mut i = sum_copy1.lock().unwrap();
       Thread::<Unit>::suspend(Request::Yield);
       // t runs first so it gets the lock first
       assert!(*i == 0);
@@ -135,14 +135,14 @@ mod tests {
     });
 
     let t2 = thread(move || {
-      *sum_copy2.lock() += 1;
+      *sum_copy2.lock().unwrap() += 1;
     });
 
     q.push_front(t2);
     q.push_front(t);
     let mut s: Scheduler<Unit> = Scheduler::new(q);
     s.run();
-    assert!(*sum.lock() == 2);
+    assert!(*sum.lock().unwrap() == 2);
   }
 
   #[test]
@@ -156,9 +156,9 @@ mod tests {
     let t1 = thread(move || {
       let inner = thread(move || {
         let &(ref lock, ref cvar) = &*pair2;
-        let mut v = lock.lock();
+        let mut v = lock.lock().unwrap();
         while v.len() == 0 {
-          v = cvar.wait(v);
+          v = cvar.wait(v).unwrap();
         }
         v.push(2);
         cvar.notify_one();
@@ -167,9 +167,9 @@ mod tests {
       Thread::<Unit>::suspend(Request::Schedule(box ::linked_list::Node::new(inner)));
 
       let &(ref lock, ref cvar) = &*pair;
-      let mut v = lock.lock();
+      let mut v = lock.lock().unwrap();
       v.push(1);
-      v = cvar.wait(v);
+      v = cvar.wait(v).unwrap();
       v.push(3)
     });
 
@@ -177,7 +177,7 @@ mod tests {
 
     Scheduler::<Unit>::new(q).run();
     let &(ref lock, _) = &*pair3;
-    assert_eq!(*lock.lock(), vec!(1, 2, 3));
+    assert_eq!(*lock.lock().unwrap(), vec!(1, 2, 3));
   }
 
 }
