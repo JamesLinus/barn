@@ -87,7 +87,7 @@ mod local_impl {
   pub fn get() -> usize {
     let gs: u32;
     unsafe {
-      asm!("movl %gs, $0"
+      asm!("movl %dr0, $0"
           :"={eax}"(gs)
           :
           :
@@ -98,7 +98,7 @@ mod local_impl {
 
   pub fn set(value: usize) {
     unsafe {
-      asm!("movl $0, %gs"
+      asm!("movl $0, %dr0"
           :
           :"{eax}"(value as u32)
           :

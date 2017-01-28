@@ -4,7 +4,8 @@ extern crate alloc;
 use self::alloc::boxed::Box;
 
 use fringe::OwnedStack;
-use scheduler::{Thread, Node};
+use scheduler;
+use lock;
 
 use core::ops::Deref;
 
@@ -18,16 +19,25 @@ impl ::scheduler::SchedulerUnit for Unit {
 
 type Local = Option<()>;
 
-type BasicNode = Box<::linked_list::Node<Thread<Unit>>>;
-type Queue = ::linked_list::LinkedList<Thread<Unit>>;
+type BasicNode = Box<::linked_list::Node<scheduler::Thread<Unit>>>;
+pub type Queue = ::linked_list::LinkedList<scheduler::Thread<Unit>>;
+pub type Scheduler = scheduler::Scheduler<Unit>;
+pub type Mutex<T> = lock::Mutex<T, Unit>;
+pub type MutexGuard<'a, T> = lock::MutexGuard<'a, T, Unit>;
+pub type Condvar = lock::Condvar<Unit>;
+pub type RwLock<T> =  lock::RwLock<T, Unit>;
+pub type RwLockReadGuard<'a, T> = lock::RwLockReadGuard<'a, T, Unit>;
+pub type RwLockWriteGuard<'a, T> = lock::RwLockWriteGuard<'a, T, Unit>;
+pub type Thread = scheduler::Thread<Unit>;
 
-impl Node<Unit> for BasicNode {
 
-  fn deref(&self) -> &Thread<Unit> {
+impl scheduler::Node<Unit> for BasicNode {
+
+  fn deref(&self) -> &Thread {
     &self.value
   }
 
-  fn deref_mut(&mut self) -> &mut Thread<Unit> {
+  fn deref_mut(&mut self) -> &mut Thread {
     &mut self.value
   }
 
@@ -60,18 +70,16 @@ impl ::scheduler::Queue<Unit> for Queue {
 unsafe impl Send for Queue {}
 unsafe impl Sync for Queue {}
 
+
 #[cfg(test)]
 mod tests {
   use std::sync::Arc;
 
-  use super::{Queue, Unit};
-  use scheduler::{Scheduler, Thread, Request};
+  use super::*;
+  use scheduler::Request;
   use fringe::{OwnedStack, Generator};
 
-  type Mutex<T> = ::lock::Mutex<T, Unit>;
-  type Condvar = ::lock::Condvar<Unit>;
-
-  fn thread<F: FnOnce() + Send + 'static>(f: F) -> Thread<Unit> {
+  fn thread<F: FnOnce() + Send + 'static>(f: F) -> Thread {
     let stack = OwnedStack::new(1024 * 1024);
     unsafe { Thread::new(stack, f) }
   }
@@ -85,9 +93,9 @@ mod tests {
       *ran.lock().unwrap() = true;
     });
     q.push_front(t);
-    debug!("pushed: 0x{:x}", q.front().unwrap() as *const Thread<Unit> as usize);
+    debug!("pushed: 0x{:x}", q.front().unwrap() as *const Thread as usize);
 
-    let mut s: Scheduler<Unit> = Scheduler::new(q);
+    let mut s: Scheduler = Scheduler::new(q);
     s.run();
     assert!(*saved_ran.lock().unwrap());
   }
@@ -100,7 +108,7 @@ mod tests {
   #[test]
   fn yield_smoke() {
     smoke(|| {
-      Thread::<Unit>::suspend(Request::Yield);
+      Thread::suspend(Request::Yield);
     });
   }
 
@@ -114,7 +122,7 @@ mod tests {
       *ran.lock().unwrap() = true;
     });
     q.push_front(t);
-    let mut s: Scheduler<Unit> = Scheduler::new(q);
+    let mut s: Scheduler = Scheduler::new(q);
     s.run();
     assert!(*saved_ran.lock().unwrap());
   }
@@ -128,7 +136,7 @@ mod tests {
 
     let t = thread(move || {
       let mut i = sum_copy1.lock().unwrap();
-      Thread::<Unit>::suspend(Request::Yield);
+      Thread::suspend(Request::Yield);
       // t runs first so it gets the lock first
       assert!(*i == 0);
       *i += 1;
@@ -140,7 +148,7 @@ mod tests {
 
     q.push_front(t2);
     q.push_front(t);
-    let mut s: Scheduler<Unit> = Scheduler::new(q);
+    let mut s: Scheduler = Scheduler::new(q);
     s.run();
     assert!(*sum.lock().unwrap() == 2);
   }
@@ -164,7 +172,7 @@ mod tests {
         cvar.notify_one();
       });
 
-      Thread::<Unit>::suspend(Request::Schedule(box ::linked_list::Node::new(inner)));
+      Thread::suspend(Request::Schedule(box ::linked_list::Node::new(inner)));
 
       let &(ref lock, ref cvar) = &*pair;
       let mut v = lock.lock().unwrap();
@@ -175,7 +183,7 @@ mod tests {
 
     q.push_front(t1);
 
-    Scheduler::<Unit>::new(q).run();
+    Scheduler::new(q).run();
     let &(ref lock, _) = &*pair3;
     assert_eq!(*lock.lock().unwrap(), vec!(1, 2, 3));
   }
