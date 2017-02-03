@@ -12,6 +12,9 @@ pub trait SchedulerUnit where Self: Sized + 'static {
 }
 
 pub trait Node<U: SchedulerUnit> where Self: Send + Sized {
+
+  fn new(t: Thread<U>) -> Self;
+
   // TODO: should be able to inhereit associated type, but looks like compiler problem.
   fn deref(&self) -> &Thread<U>;
 

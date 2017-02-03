@@ -12,14 +12,14 @@ use core::ops::Deref;
 pub struct Unit;
 impl ::scheduler::SchedulerUnit for Unit {
   type L = Local;
-  type N = BasicNode;
+  type N = Node;
   type Q = Queue;
   type S = OwnedStack;
 }
 
 type Local = Option<()>;
 
-type BasicNode = Box<::linked_list::Node<scheduler::Thread<Unit>>>;
+pub type Node = Box<::linked_list::Node<scheduler::Thread<Unit>>>;
 pub type Queue = ::linked_list::LinkedList<scheduler::Thread<Unit>>;
 pub type Scheduler = scheduler::Scheduler<Unit>;
 pub type Mutex<T> = lock::Mutex<T, Unit>;
@@ -31,7 +31,11 @@ pub type RwLockWriteGuard<'a, T> = lock::RwLockWriteGuard<'a, T, Unit>;
 pub type Thread = scheduler::Thread<Unit>;
 
 
-impl scheduler::Node<Unit> for BasicNode {
+impl scheduler::Node<Unit> for Node {
+
+  fn new(t: Thread) -> Self {
+    box ::linked_list::Node::new(t)
+  }
 
   fn deref(&self) -> &Thread {
     &self.value
@@ -49,19 +53,19 @@ impl ::scheduler::Queue<Unit> for Queue {
     ::linked_list::LinkedList::new()
   }
 
-  fn push(&mut self, node: BasicNode) {
+  fn push(&mut self, node: Node) {
     self.push_back_node(node);
   }
   
-  fn pop(&mut self) -> Option<BasicNode> {
+  fn pop(&mut self) -> Option<Node> {
     self.pop_front_node()
   }
   
-  fn front(&self) -> Option<&BasicNode> {
+  fn front(&self) -> Option<&Node> {
     self.list_head.as_ref()
   }
 
-  fn front_mut(&mut self) -> Option<&mut BasicNode> {
+  fn front_mut(&mut self) -> Option<&mut Node> {
     self.list_head.as_mut()
   }
 
@@ -172,7 +176,7 @@ mod tests {
         cvar.notify_one();
       });
 
-      Thread::suspend(Request::Schedule(box ::linked_list::Node::new(inner)));
+      Thread::suspend(Request::Schedule(Node::new(inner)));
 
       let &(ref lock, ref cvar) = &*pair;
       let mut v = lock.lock().unwrap();
